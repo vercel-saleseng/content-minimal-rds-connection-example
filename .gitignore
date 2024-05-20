@@ -47,3 +47,7 @@ next-env.d.ts
 
 # Crash log files
 crash.log
+
+# Ignore any built JS files
+/src/lambda/**/*.js
+/src/lambda/**/*.zip
