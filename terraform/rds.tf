@@ -221,7 +221,43 @@ resource "aws_lambda_function" "crud_lambda" {
   timeout       = 300
 }
 
-### API Gateway TODO
+### API Gateway 
+
+resource "aws_apigatewayv2_api" "todo_api" {
+  name          = "todo_api"
+  protocol_type = "HTTP"
+}
+
+resource "aws_apigatewayv2_stage" "todo_api_prod" {
+  api_id      = aws_apigatewayv2_api.todo_api.id
+  name        = "prod"
+  auto_deploy = true
+}
+
+resource "aws_apigatewayv2_integration" "crud_lambda" {
+  api_id = aws_apigatewayv2_api.todo_api.id
+
+  integration_uri    = aws_lambda_function.crud_lambda.invoke_arn
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "crud_lambda" {
+  api_id = aws_apigatewayv2_api.todo_api.id
+
+  route_key = "POST /crud"
+  target    = "integrations/${aws_apigatewayv2_integration.crud_lambda.id}"
+}
+
+
+resource "aws_lambda_permission" "crud_lambda" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.crud_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  source_arn = "${aws_apigatewayv2_api.todo_api.execution_arn}/*/*"
+}
 
 ### S3
 
@@ -255,4 +291,10 @@ output "rds_username" {
   description = "RDS instance root username"
   value       = aws_db_instance.vercel.username
   sensitive   = true
+}
+
+
+output "base_url" {
+  description = "Base URL for API Gateway."
+  value       = aws_apigatewayv2_stage.todo_api_prod.invoke_url
 }
