@@ -215,7 +215,7 @@ resource "aws_lambda_function" "crud_lambda" {
   filename      = data.archive_file.crud_lambda.output_path
   function_name = "crud_lambda"
   role          = aws_iam_role.vercel_rds_role.arn
-  handler       = "index.handler"
+  handler       = "crud.handler"
   runtime       = "nodejs20.x"
   memory_size   = 1024
   timeout       = 300
