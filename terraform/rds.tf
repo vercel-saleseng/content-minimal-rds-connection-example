@@ -87,6 +87,29 @@ resource "aws_security_group" "rds" {
   }
 }
 
+resource "aws_security_group" "lambda" {
+  name   = "vercel_lambda"
+  vpc_id = module.vpc.vpc_id
+
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = local.private_subnet_cidrs
+  }
+
+  egress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = local.private_subnet_cidrs
+  }
+
+  tags = {
+    Name = "vercel_rds"
+  }
+}
+
 resource "aws_iam_role" "vercel_rds_role" {
   name = "vercel_rds_role"
   assume_role_policy = jsonencode({
@@ -138,6 +161,31 @@ resource "aws_iam_role" "vercel_rds_role" {
   tags = {
     Name = "vercel_rds"
   }
+}
+
+resource "aws_iam_policy" "vercel_lambda_policy" {
+  name = "vercel_lambda_policy"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface",
+          "ec2:AssignPrivateIpAddresses",
+          "ec2:UnassignPrivateIpAddresses"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "vercel_lambda_policy_attachment" {
+  role       = aws_iam_role.vercel_rds_role.name
+  policy_arn = aws_iam_policy.vercel_lambda_policy.arn
 }
 
 resource "aws_secretsmanager_secret" "vercel_rds_db_creds" {
@@ -219,6 +267,19 @@ resource "aws_lambda_function" "crud_lambda" {
   runtime       = "nodejs20.x"
   memory_size   = 1024
   timeout       = 300
+
+  vpc_config {
+    subnet_ids         = module.vpc.private_subnets
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
+  environment {
+    variables = {
+      RDS_PROXY_ENDPOINT = aws_db_proxy.vercel_rds_proxy.endpoint
+      DB_USERNAME        = "vercel"
+      DB_PASSWORD        = var.db_password
+    }
+  }
 }
 
 ### API Gateway 
@@ -297,4 +358,4 @@ output "rds_username" {
 output "base_url" {
   description = "Base URL for API Gateway."
   value       = aws_apigatewayv2_stage.todo_api_prod.invoke_url
-}
+o
