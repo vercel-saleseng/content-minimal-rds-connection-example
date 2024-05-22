@@ -9,12 +9,11 @@
     "lint": "next lint",
     "build:lambda": "tsc -p src/lambda",
     "terraform:init": "cd terraform && terraform init",
-    "terraform:plan": "cd terraform && terraform plan",
-    "terraform:apply": "cd terraform && terraform apply",
+    "terraform:plan": "cd terraform && terraform plan --var-file=rds.tfvars",
+    "terraform:apply": "cd terraform && terraform apply --var-file=rds.tfvars",
     "deploy:plan": "pnpm run build:lambda && pnpm run terraform:plan"
   },
   "dependencies": {
-    "knex": "^3.1.0",
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18"
