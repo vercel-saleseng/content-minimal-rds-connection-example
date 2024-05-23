@@ -233,11 +233,13 @@ resource "aws_iam_role_policy_attachment" "vercel_lambda_policy_attachment" {
   policy_arn = aws_iam_policy.vercel_lambda_policy.arn
 }
 
+# Ensures the Lambda can write to CloudWatch
 resource "aws_iam_role_policy_attachment" "vercel_lambda_basic_execution_role" {
   role       = aws_iam_role.vercel_rds_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# Ensures the RDS Proxy has access to Secrets Manager for the DB credentials
 resource "aws_iam_role_policy_attachment" "vercel_rds_proxy_policy_attachment" {
   role       = aws_iam_role.vercel_rds_role.name
   policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
@@ -318,6 +320,7 @@ resource "aws_db_proxy_target" "vercel_rds_proxy_target" {
 }
 
 ### Lambda
+### Connects to the RDS instance via the RDS Proxy - serverless and compatible calling via Vercel
 
 data "archive_file" "crud_lambda" {
   type        = "zip"
