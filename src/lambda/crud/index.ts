@@ -13,8 +13,15 @@ const dbConfig = {
   },
 };
 
-export const handler: Handler<APICrudReadParams> = async (event) => {
-  const action = event?.action;
+export const handler: Handler = async (event) => {
+  let payload: APICrudReadParams | null = null;
+  if (event?.body) {
+    payload = JSON.parse(event.body);
+  } else {
+    payload = event;
+  }
+  console.log("payload", JSON.stringify(payload, null, 2));
+  const action = payload?.action;
   if (!action) {
     return {
       statusCode: 400,
