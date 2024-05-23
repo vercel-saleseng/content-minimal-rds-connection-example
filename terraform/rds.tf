@@ -357,6 +357,12 @@ resource "aws_lambda_function" "crud_lambda" {
 resource "aws_apigatewayv2_api" "todo_api" {
   name          = "todo_api"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"] # You can specify allowed origins here
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers = ["Content-Type", "Authorization"]
+  }
 }
 
 resource "aws_apigatewayv2_stage" "todo_api_prod" {

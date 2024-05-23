@@ -64,7 +64,9 @@ export const handler: Handler = async (event) => {
     let result = null;
 
     if (action === "read") {
-      result = await client.query<TodoItem>("SELECT * FROM todo");
+      result = await client.query<TodoItem>(
+        "SELECT * FROM todo WHERE deleted_at IS NULL AND completed = false",
+      );
     }
 
     if (action === "create") {
@@ -76,11 +78,21 @@ export const handler: Handler = async (event) => {
     }
 
     if (action === "update") {
-      const { id, title, description, completed } =
-        payload as APICrudUpdateParams;
+      const { id } = payload as APICrudUpdateParams;
+      const updatedFields = Object.keys(payload as APICrudUpdateParams).filter(
+        (key) => key !== "action" && key !== "id",
+      );
+      const updates = [];
+      const values: any[] = [];
+
+      for (const field of updatedFields) {
+        updates.push(`${field} = $${values.length + 1}`);
+        values.push((payload as any)[field]);
+      }
+
       result = await client.query<TodoItem>(
-        "UPDATE todo SET title = $1, description = $2, completed = $3 WHERE id = $4 RETURNING *",
-        [title, description, completed, id],
+        `UPDATE todo SET ${updates.join(", ")} WHERE id = ${id} RETURNING *`,
+        values,
       );
     }
 

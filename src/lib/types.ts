@@ -14,14 +14,14 @@ export type APICrudReadParams = {
 
 export type APICrudCreateParams = Omit<
   TodoItem,
-  "id" | "updated_at" | "created_at"
+  "id" | "updated_at" | "created_at" | "deleted_at"
 > & {
   action: "create";
 };
 
-export type APICrudUpdateParams = Omit<
-  TodoItem,
-  "created_at" | "updated_at"
+export type APICrudUpdateParams = Partial<
+  Omit<TodoItem, "created_at" | "updated_at">
 > & {
   action: "update";
+  id: TodoItem["id"];
 };

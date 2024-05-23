@@ -16,17 +16,20 @@
   },
   "dependencies": {
     "@types/pg": "^8.11.6",
+    "clsx": "^2.1.1",
+    "daisyui": "^4.11.1",
     "next": "14.2.3",
     "pg": "^8.11.5",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "swr": "^2.2.5",
+    "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.137",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "daisyui": "^4.10.2",
     "eslint": "^8",
     "eslint-config-next": "14.2.3",
     "postcss": "^8",
