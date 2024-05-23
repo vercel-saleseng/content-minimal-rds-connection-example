@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -51,3 +52,4 @@ crash.log
 # Ignore any built JS files
 /src/lambda/**/*.js
 /src/lambda/**/*.zip
+/src/lib/**/*.js

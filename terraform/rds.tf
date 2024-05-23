@@ -79,6 +79,7 @@ resource "aws_security_group" "rds" {
   name   = "vercel_rds"
   vpc_id = module.vpc.vpc_id
 
+  # Allows connections from the private subnets and the bastion instance
   ingress {
     from_port       = 5432
     to_port         = 5432
@@ -103,6 +104,7 @@ resource "aws_security_group" "rds_public" {
   name   = "vercel_rds_public"
   vpc_id = module.vpc.vpc_id
 
+  # Allows SSH connections from my IP
   ingress {
     from_port   = 22
     to_port     = 22
@@ -110,6 +112,7 @@ resource "aws_security_group" "rds_public" {
     cidr_blocks = ["${var.my_ip}/32"]
   }
 
+  # Allows my IP to connect to the RDS instance
   ingress {
     from_port   = 5432
     to_port     = 5432
@@ -217,7 +220,7 @@ resource "aws_iam_policy" "vercel_lambda_policy" {
           "ec2:DescribeNetworkInterfaces",
           "ec2:DeleteNetworkInterface",
           "ec2:AssignPrivateIpAddresses",
-          "ec2:UnassignPrivateIpAddresses"
+          "ec2:UnassignPrivateIpAddresses",
         ],
         Resource = "*"
       }
@@ -230,6 +233,16 @@ resource "aws_iam_role_policy_attachment" "vercel_lambda_policy_attachment" {
   policy_arn = aws_iam_policy.vercel_lambda_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "vercel_lambda_basic_execution_role" {
+  role       = aws_iam_role.vercel_rds_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "vercel_rds_proxy_policy_attachment" {
+  role       = aws_iam_role.vercel_rds_role.name
+  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+}
+
 resource "aws_secretsmanager_secret" "vercel_rds_db_creds" {
   name = "vercel_rds_db_creds"
 }
@@ -237,8 +250,12 @@ resource "aws_secretsmanager_secret" "vercel_rds_db_creds" {
 resource "aws_secretsmanager_secret_version" "db_creds" {
   secret_id = aws_secretsmanager_secret.vercel_rds_db_creds.id
   secret_string = jsonencode({
-    username = "vercel"
-    password = var.db_password
+    "username"             = "vercel"
+    "password"             = var.db_password
+    "engine"               = "postgres"
+    "host"                 = aws_db_instance.vercel.address
+    "port"                 = 5432
+    "dbInstanceIdentifier" = "vercel"
   })
 }
 
@@ -294,11 +311,17 @@ resource "aws_db_proxy" "vercel_rds_proxy" {
   }
 }
 
+resource "aws_db_proxy_target" "vercel_rds_proxy_target" {
+  db_instance_identifier = aws_db_instance.vercel.identifier
+  db_proxy_name          = aws_db_proxy.vercel_rds_proxy.name
+  target_group_name      = "default"
+}
+
 ### Lambda
 
 data "archive_file" "crud_lambda" {
   type        = "zip"
-  source_file = "${path.module}/../src/lambda/crud.js"
+  source_dir  = "${path.module}/../src/lambda/crud"
   output_path = "${path.module}/../src/lambda/crud_${var.lambdasVersion}.zip"
 }
 
@@ -306,14 +329,14 @@ resource "aws_lambda_function" "crud_lambda" {
   filename      = data.archive_file.crud_lambda.output_path
   function_name = "crud_lambda"
   role          = aws_iam_role.vercel_rds_role.arn
-  handler       = "crud.handler"
+  handler       = "index.handler"
   runtime       = "nodejs20.x"
   memory_size   = 1024
   timeout       = 300
 
   vpc_config {
     subnet_ids         = module.vpc.private_subnets
-    security_group_ids = [aws_security_group.lambda.id]
+    security_group_ids = [aws_security_group.lambda.id, aws_security_group.rds.id]
   }
 
   environment {
@@ -407,19 +430,18 @@ output "rds_port" {
   sensitive   = true
 }
 
+output "bastion_ip" {
+  description = "Bastion IP address"
+  value       = aws_instance.bastion.public_ip
+}
+
 output "rds_username" {
   description = "RDS instance root username"
   value       = aws_db_instance.vercel.username
   sensitive   = true
 }
 
-
 output "api_gateway_url" {
   description = "Base URL for API Gateway."
   value       = aws_apigatewayv2_stage.todo_api_prod.invoke_url
-}
-
-output "bastion_ip" {
-  description = "Bastion IP address"
-  value       = aws_instance.bastion.public_ip
 }

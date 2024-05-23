@@ -14,7 +14,9 @@
     "deploy:plan": "pnpm run build:lambda && pnpm run terraform:plan"
   },
   "dependencies": {
+    "@types/pg": "^8.11.6",
     "next": "14.2.3",
+    "pg": "^8.11.5",
     "react": "^18",
     "react-dom": "^18"
   },
