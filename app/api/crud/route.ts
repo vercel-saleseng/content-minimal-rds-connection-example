@@ -27,12 +27,14 @@ export async function POST(request: Request) {
   console.log("payload", JSON.stringify(payload, null, 2));
   const action = payload?.action;
   if (!action) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         message: "Bad Request: Missing action parameter",
       }),
-    };
+      {
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
 
   switch (action) {
@@ -42,12 +44,14 @@ export async function POST(request: Request) {
       break;
     default:
       const _exhaustiveCheck: never = action; // TypeScript check to catch missing cases
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          message: `Bad Request: Unknown action ${action}`,
+      return new Response(
+        JSON.stringify({
+          message: "Bad Request: Invalid action parameter",
         }),
-      };
+        {
+          headers: { "content-type": "application/json" },
+        },
+      );
   }
 
   try {
@@ -94,17 +98,18 @@ export async function POST(request: Request) {
     }
 
     console.log(result.rows);
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.rows),
-    };
+    return new Response(JSON.stringify(result.rows), {
+      headers: { "content-type": "application/json" },
+    });
   } catch (error) {
     console.error(error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         message: `Internal Server Error: ${JSON.stringify(error)}`,
       }),
-    };
+      {
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
 }
