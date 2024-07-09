@@ -1,11 +1,10 @@
-import { Handler } from "aws-lambda";
 import { Client } from "pg";
 import {
   APICrudCreateParams,
   APICrudReadParams,
   APICrudUpdateParams,
   TodoItem,
-} from "../../lib/types";
+} from "@/src/lib/types";
 
 const dbConfig = {
   user: process.env.DB_USERNAME,
@@ -18,18 +17,12 @@ const dbConfig = {
   },
 };
 
-export const handler: Handler = async (event) => {
-  let payload:
+export async function POST(request: Request) {
+  const payload:
     | APICrudReadParams
     | APICrudCreateParams
     | APICrudUpdateParams
-    | null = null;
-
-  if (event?.body) {
-    payload = JSON.parse(event.body);
-  } else {
-    payload = event;
-  }
+    | null = await request.json();
 
   console.log("payload", JSON.stringify(payload, null, 2));
   const action = payload?.action;
@@ -114,4 +107,4 @@ export const handler: Handler = async (event) => {
       }),
     };
   }
-};
+}

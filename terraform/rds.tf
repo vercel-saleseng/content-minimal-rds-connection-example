@@ -9,14 +9,19 @@ variable "db_password" {
   sensitive   = true
 }
 
-variable "lambdasVersion" {
-  type        = string
-  description = "version of the lambdas zip on S3"
-}
-
 variable "my_ip" {
   type        = string
   description = "Your IP address"
+}
+
+variable "secure_compute_ip_1" {
+  type        = string
+  description = "The IP address of the first Vercel secure compute instance"
+}
+
+variable "secure_compute_ip_2" {
+  type        = string
+  description = "The IP address of the second Vercel secure compute instance"
 }
 
 variable "bastion_key_pair" {
@@ -79,31 +84,6 @@ resource "aws_security_group" "rds" {
   name   = "vercel_rds"
   vpc_id = module.vpc.vpc_id
 
-  # Allows connections from the private subnets and the bastion instance
-  ingress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    cidr_blocks     = local.private_subnet_cidrs
-    security_groups = [aws_security_group.rds_public.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "vercel_rds"
-  }
-}
-
-resource "aws_security_group" "rds_public" {
-  name   = "vercel_rds_public"
-  vpc_id = module.vpc.vpc_id
-
   # Allows SSH connections from my IP
   ingress {
     from_port   = 22
@@ -120,27 +100,12 @@ resource "aws_security_group" "rds_public" {
     cidr_blocks = ["${var.my_ip}/32"]
   }
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "vercel_rds"
-  }
-}
-
-resource "aws_security_group" "lambda" {
-  name   = "vercel_lambda"
-  vpc_id = module.vpc.vpc_id
-
+  # Allows the secure compute instances to connect to the RDS instances
   ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = local.private_subnet_cidrs
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["${var.secure_compute_ip_1}/32", "${var.secure_compute_ip_2}/32"]
   }
 
   egress {
@@ -208,37 +173,6 @@ resource "aws_iam_role" "vercel_rds_role" {
   }
 }
 
-resource "aws_iam_policy" "vercel_lambda_policy" {
-  name = "vercel_lambda_policy"
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "ec2:CreateNetworkInterface",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DeleteNetworkInterface",
-          "ec2:AssignPrivateIpAddresses",
-          "ec2:UnassignPrivateIpAddresses",
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "vercel_lambda_policy_attachment" {
-  role       = aws_iam_role.vercel_rds_role.name
-  policy_arn = aws_iam_policy.vercel_lambda_policy.arn
-}
-
-# Ensures the Lambda can write to CloudWatch
-resource "aws_iam_role_policy_attachment" "vercel_lambda_basic_execution_role" {
-  role       = aws_iam_role.vercel_rds_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
 # Ensures the RDS Proxy has access to Secrets Manager for the DB credentials
 resource "aws_iam_role_policy_attachment" "vercel_rds_proxy_policy_attachment" {
   role       = aws_iam_role.vercel_rds_role.name
@@ -282,7 +216,7 @@ resource "aws_db_instance" "vercel" {
   username               = "vercel"
   password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.vercel.name
-  vpc_security_group_ids = [aws_security_group.rds.id, aws_security_group.rds_public.id]
+  vpc_security_group_ids = [aws_security_group.rds.id]
   parameter_group_name   = aws_db_parameter_group.vercel.name
   publicly_accessible    = false
   skip_final_snapshot    = true
@@ -290,6 +224,7 @@ resource "aws_db_instance" "vercel" {
 
 ### RDS Proxy
 ### Used to manage serverless connections to the RDS instance
+### Vercel application will securely connect to the RDS instance through the proxy
 
 resource "aws_db_proxy" "vercel_rds_proxy" {
   name                   = "vercel-rds-proxy"
@@ -299,7 +234,7 @@ resource "aws_db_proxy" "vercel_rds_proxy" {
   require_tls            = true
   role_arn               = aws_iam_role.vercel_rds_role.arn
   vpc_security_group_ids = [aws_security_group.rds.id]
-  vpc_subnet_ids         = module.vpc.private_subnets
+  vpc_subnet_ids         = module.vpc.public_subnets
 
   auth {
     auth_scheme = "SECRETS"
@@ -317,81 +252,6 @@ resource "aws_db_proxy_target" "vercel_rds_proxy_target" {
   db_instance_identifier = aws_db_instance.vercel.identifier
   db_proxy_name          = aws_db_proxy.vercel_rds_proxy.name
   target_group_name      = "default"
-}
-
-### Lambda
-### Connects to the RDS instance via the RDS Proxy - serverless and compatible calling via Vercel
-
-data "archive_file" "crud_lambda" {
-  type        = "zip"
-  source_dir  = "${path.module}/../src/lambda/crud"
-  output_path = "${path.module}/../src/lambda/crud_${var.lambdasVersion}.zip"
-}
-
-resource "aws_lambda_function" "crud_lambda" {
-  filename      = data.archive_file.crud_lambda.output_path
-  function_name = "crud_lambda"
-  role          = aws_iam_role.vercel_rds_role.arn
-  handler       = "index.handler"
-  runtime       = "nodejs20.x"
-  memory_size   = 1024
-  timeout       = 300
-
-  vpc_config {
-    subnet_ids         = module.vpc.private_subnets
-    security_group_ids = [aws_security_group.lambda.id, aws_security_group.rds.id]
-  }
-
-  environment {
-    variables = {
-      RDS_PROXY_ENDPOINT = aws_db_proxy.vercel_rds_proxy.endpoint
-      DB_USERNAME        = "vercel"
-      DB_PASSWORD        = var.db_password
-    }
-  }
-}
-
-### API Gateway 
-### Exposes the Lambda function to the internet, the rest of our infra will sit inside our VPC
-
-resource "aws_apigatewayv2_api" "todo_api" {
-  name          = "todo_api"
-  protocol_type = "HTTP"
-
-  cors_configuration {
-    allow_origins = ["*"] # You can specify allowed origins here
-    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allow_headers = ["Content-Type", "Authorization"]
-  }
-}
-
-resource "aws_apigatewayv2_stage" "todo_api_prod" {
-  api_id      = aws_apigatewayv2_api.todo_api.id
-  name        = "prod"
-  auto_deploy = true
-}
-
-resource "aws_apigatewayv2_integration" "crud_lambda" {
-  api_id             = aws_apigatewayv2_api.todo_api.id
-  integration_uri    = aws_lambda_function.crud_lambda.invoke_arn
-  integration_type   = "AWS_PROXY"
-  integration_method = "POST"
-}
-
-resource "aws_apigatewayv2_route" "crud_lambda" {
-  api_id    = aws_apigatewayv2_api.todo_api.id
-  route_key = "POST /crud"
-  target    = "integrations/${aws_apigatewayv2_integration.crud_lambda.id}"
-}
-
-
-resource "aws_lambda_permission" "crud_lambda" {
-  statement_id  = "AllowExecutionFromAPIGateway"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.crud_lambda.function_name
-  principal     = "apigateway.amazonaws.com"
-
-  source_arn = "${aws_apigatewayv2_api.todo_api.execution_arn}/*/*"
 }
 
 ### S3
@@ -416,7 +276,7 @@ resource "aws_instance" "bastion" {
   ami                         = "ami-0bb84b8ffd87024d8"
   instance_type               = "t2.micro"
   subnet_id                   = module.vpc.public_subnets[0]
-  vpc_security_group_ids      = [aws_security_group.rds.id, aws_security_group.rds_public.id]
+  vpc_security_group_ids      = [aws_security_group.rds.id]
   key_name                    = var.bastion_key_pair
   associate_public_ip_address = true
 
@@ -450,7 +310,7 @@ output "rds_username" {
   sensitive   = true
 }
 
-output "api_gateway_url" {
-  description = "Base URL for API Gateway."
-  value       = aws_apigatewayv2_stage.todo_api_prod.invoke_url
+output "rds_proxy_endpoint" {
+  description = "RDS Proxy endpoint"
+  value       = aws_db_proxy.vercel_rds_proxy.endpoint
 }
