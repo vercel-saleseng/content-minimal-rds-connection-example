@@ -1,67 +1,28 @@
 "use client";
 import useSWR, { mutate } from "swr";
 import useSWRMutation from "swr/mutation";
-import {
-  APICrudCreateParams,
-  APICrudReadParams,
-  APICrudUpdateParams,
-  TodoItem,
-} from "../lib/types";
+import { APICrudCreateParams, TodoItem } from "../lib/types";
 import { cn } from "../utils";
 import { useState } from "react";
+import { readTodos, putTodo } from "@/app/actions";
 
 const CREATE_MODAL_ID = "create_modal";
 
-const readTodos = async (url: string) => {
-  const params: APICrudReadParams = {
-    action: "read",
-  };
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(params),
-  });
-
-  const data = await response.json();
-  return data;
-};
-
-const putTodo = async (
-  url: string,
-  { arg }: { arg: APICrudCreateParams | APICrudUpdateParams },
-) => {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(arg),
-  });
-
-  const data = await response.json();
-  return data;
-};
-
 export const Todo = () => {
-  const { data: todoData, isLoading } = useSWR<TodoItem[]>(
-    `${process.env.NEXT_PUBLIC_API_URL}/crud`,
-    readTodos,
-  );
+  const { data: todoData, isLoading } = useSWR<TodoItem[]>("/crud", readTodos);
 
   const { trigger: triggerCreate, isMutating: isCreating } = useSWRMutation(
-    `${process.env.NEXT_PUBLIC_API_URL}/crud`,
+    "/crud",
     putTodo,
   );
 
   const { trigger: triggerDelete, isMutating: isDeleting } = useSWRMutation(
-    `${process.env.NEXT_PUBLIC_API_URL}/crud`,
+    "/crud",
     putTodo,
   );
 
   const { trigger: triggerComplete, isMutating: isCompleting } = useSWRMutation(
-    `${process.env.NEXT_PUBLIC_API_URL}/crud`,
+    "/crud",
     putTodo,
   );
 
@@ -85,7 +46,7 @@ export const Todo = () => {
       action: "create",
       ...createTodoForm,
     });
-    mutate(`${process.env.NEXT_PUBLIC_API_URL}/crud`);
+    mutate("/crud");
     setCreateTodoForm({
       title: "",
       description: "",
