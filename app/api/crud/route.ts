@@ -1,11 +1,10 @@
-import { Handler } from "aws-lambda";
 import { Client } from "pg";
 import {
   APICrudCreateParams,
   APICrudReadParams,
   APICrudUpdateParams,
   TodoItem,
-} from "../../lib/types";
+} from "@/src/lib/types";
 
 const dbConfig = {
   user: process.env.DB_USERNAME,
@@ -18,28 +17,24 @@ const dbConfig = {
   },
 };
 
-export const handler: Handler = async (event) => {
-  let payload:
+export async function POST(request: Request) {
+  const payload:
     | APICrudReadParams
     | APICrudCreateParams
     | APICrudUpdateParams
-    | null = null;
-
-  if (event?.body) {
-    payload = JSON.parse(event.body);
-  } else {
-    payload = event;
-  }
+    | null = await request.json();
 
   console.log("payload", JSON.stringify(payload, null, 2));
   const action = payload?.action;
   if (!action) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         message: "Bad Request: Missing action parameter",
       }),
-    };
+      {
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
 
   switch (action) {
@@ -49,12 +44,14 @@ export const handler: Handler = async (event) => {
       break;
     default:
       const _exhaustiveCheck: never = action; // TypeScript check to catch missing cases
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          message: `Bad Request: Unknown action ${action}`,
+      return new Response(
+        JSON.stringify({
+          message: "Bad Request: Invalid action parameter",
         }),
-      };
+        {
+          headers: { "content-type": "application/json" },
+        },
+      );
   }
 
   try {
@@ -101,17 +98,18 @@ export const handler: Handler = async (event) => {
     }
 
     console.log(result.rows);
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.rows),
-    };
+    return new Response(JSON.stringify(result.rows), {
+      headers: { "content-type": "application/json" },
+    });
   } catch (error) {
     console.error(error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         message: `Internal Server Error: ${JSON.stringify(error)}`,
       }),
-    };
+      {
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
-};
+}
